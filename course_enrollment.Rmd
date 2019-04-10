@@ -1,0 +1,81 @@
+---
+title: "course_enrollment"
+author: "Shivani Aggarwal"
+date: "April 6, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(ggplot2)
+library(janitor)
+library(readxl)
+library(gt)
+library(fs)
+library(stringr)
+library(wordcloud)
+library(gganimate)
+```
+
+```{r echo=FALSE}
+
+download.file(url = "https://registrar.fas.harvard.edu/files/fas-registrar/files/class_enrollment_summary_by_term_2.28.19.xlsx", destfile = "spring_2019.xlsx", mode="wb")
+
+download.file(url = "https://registrar.fas.harvard.edu/files/fas-registrar/files/class_enrollment_summary_by_term_03.06.18.xlsx", destfile = "spring_2018.xlsx", mode="wb")
+
+download.file(url = "http://registrar.fas.harvard.edu/files/fas-registrar/files/class_enrollment_summary_by_term_2017_03_07_final_0.xlsx", destfile = "spring_2017.xlsx", mode="wb")
+
+read_enrollment <- function(file, item) {
+  read_xlsx(file, skip = 3) %>% 
+    clean_names() %>% 
+    filter(! is.na(course_name), u_grad > 5) %>% 
+    select(course_id, course_department, course_name, course_title, u_grad)
+}
+
+spring_2017 <- read_enrollment("spring_2017.xlsx", 2017) %>% rename(`2017` = item)
+
+#spring_2018 <- read_enrollment("spring_2018.xlsx", `2017`)
+#spring_2019 <- read_enrollment("spring_2019.xlsx", `2017`)
+
+spring_2018 <- read_xlsx("spring_2018.xlsx", skip = 3) %>% 
+  clean_names()  %>% 
+  filter(! is.na(course_name), u_grad > 5) %>% 
+  select(course_id, course_department, course_name, course_title, `2018`=u_grad)
+
+spring_2019 <- read_xlsx("spring_2019.xlsx", skip=3) %>%
+  clean_names() %>% 
+  filter(! is.na(course_name), u_grad > 5) %>% 
+  select(course_id, course_department, course_title, course_name, `2019`=u_grad)
+
+fs::file_delete(c("spring_2019.xlsx", "spring_2018.xlsx"))
+
+courses <- full_join(spring_2019, spring_2018, by = c("course_id", "course_title", "course_department", "course_name")) %>% separate(course_title, c("type", NA), sep = " ")
+
+gen_ed <- courses %>% filter(course_department == "General Education")
+
+gathered <- gen_ed %>% gather("year", "enrollment", 5:6)
+
+gathered %>% ggplot(aes(x = year, y = enrollment)) + geom_point() + transition_states(type)
+
+gen_ed_totals <- gen_ed %>% 
+  group_by(type) %>% 
+  summarize(
+    "Total_2018" = sum(`2018`, na.rm=TRUE), 
+    "Total_2019" = sum(`2019`, na.rm=TRUE))
+
+gen_ed_totals %>% gather(key = "year", value = "enrollment", 2:3) %>% ggplot(aes(x = type, y = enrollment)) + geom_col() + facet_grid(~year)
+
+
+
+
+
+
+gen_ed %>% ggplot(aes(x = year, y = enrollment, color = course_title.x)) + geom_jitter() + coord_flip()
+
+gen_ed %>% filter(year == 2018) %>% ggplot(aes(x = enrollment)) + geom_histogram() + facet_wrap(~course_title.x)
+
+gen_ed2 <- all %>% filter(course_department.x == "General Education" | course_department.y == "General Education") 
+
+```
