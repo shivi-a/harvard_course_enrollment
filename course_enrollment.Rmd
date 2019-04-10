@@ -8,74 +8,149 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
+# Load neccessary dependencies
+
 library(tidyverse)
 library(ggplot2)
 library(janitor)
 library(readxl)
+library(ggthemes)
 library(gt)
 library(fs)
 library(stringr)
 library(wordcloud)
 library(gganimate)
+
 ```
 
-```{r echo=FALSE}
+```{r, echo=FALSE}
+
+# Load in data covering three academic years - 2016-17, 2017-18, 2018-19
+
+# Spring 2019
 
 download.file(url = "https://registrar.fas.harvard.edu/files/fas-registrar/files/class_enrollment_summary_by_term_2.28.19.xlsx", destfile = "spring_2019.xlsx", mode="wb")
 
+# Spring 2018
+
 download.file(url = "https://registrar.fas.harvard.edu/files/fas-registrar/files/class_enrollment_summary_by_term_03.06.18.xlsx", destfile = "spring_2018.xlsx", mode="wb")
+
+# Spring 2017
 
 download.file(url = "http://registrar.fas.harvard.edu/files/fas-registrar/files/class_enrollment_summary_by_term_2017_03_07_final_0.xlsx", destfile = "spring_2017.xlsx", mode="wb")
 
-read_enrollment <- function(file, item) {
-  read_xlsx(file, skip = 3) %>% 
+# Fall 2018
+
+download.file(url = "https://registrar.fas.harvard.edu/files/fas-registrar/files/class_enrollment_summary_by_term_10.24.18.xlsx", destfile = "fall_2018.xlsx", mode="wb")
+
+# Fall 2017
+
+download.file(url = "https://registrar.fas.harvard.edu/files/fas-registrar/files/class_enrollment_summary_by_term_10.20.17.xlsx", destfile = "fall_2017.xlsx", mode="wb")
+
+# Fall 2016
+
+download.file(url = "http://registrar.fas.harvard.edu/files/fas-registrar/files/copy_of_class_enrollment_summary_by_term_10.06.2016.xlsx", destfile = "fall_2016.xlsx", mode="wb")
+
+
+read_enrollment <- function(file, x = 3) {
+  read_xlsx(file, skip = x) %>% 
     clean_names() %>% 
     filter(! is.na(course_name), u_grad > 5) %>% 
-    select(course_id, course_department, course_name, course_title, u_grad)
+    filter(course_department == "General Education") %>% 
+        select(course_id, course_name, course_title, u_grad) 
 }
 
-spring_2017 <- read_enrollment("spring_2017.xlsx", 2017) %>% rename(`2017` = item)
+fall_2016 <- 
+  read_enrollment("fall_2016.xlsx") %>% 
+  rename(`fall_2016` = u_grad)
 
-#spring_2018 <- read_enrollment("spring_2018.xlsx", `2017`)
-#spring_2019 <- read_enrollment("spring_2019.xlsx", `2017`)
+spring_2017 <- 
+  read_enrollment("spring_2017.xlsx") %>% 
+  rename(`spring_2017` = u_grad)
 
-spring_2018 <- read_xlsx("spring_2018.xlsx", skip = 3) %>% 
-  clean_names()  %>% 
-  filter(! is.na(course_name), u_grad > 5) %>% 
-  select(course_id, course_department, course_name, course_title, `2018`=u_grad)
+fall_2017 <- 
+  read_enrollment("fall_2017.xlsx") %>% 
+  rename(`fall_2017` = u_grad)
 
-spring_2019 <- read_xlsx("spring_2019.xlsx", skip=3) %>%
-  clean_names() %>% 
-  filter(! is.na(course_name), u_grad > 5) %>% 
-  select(course_id, course_department, course_title, course_name, `2019`=u_grad)
+spring_2018 <- 
+  read_enrollment("spring_2018.xlsx") %>% 
+  rename(`spring_2018` = u_grad)
 
-fs::file_delete(c("spring_2019.xlsx", "spring_2018.xlsx"))
+fall_2018 <- 
+  read_enrollment("fall_2018.xlsx", 2) %>% 
+  rename(`fall_2018` = u_grad)
 
-courses <- full_join(spring_2019, spring_2018, by = c("course_id", "course_title", "course_department", "course_name")) %>% separate(course_title, c("type", NA), sep = " ")
+spring_2019 <- 
+  read_enrollment("spring_2019.xlsx") %>% 
+  rename(`spring_2019` = u_grad)
 
-gen_ed <- courses %>% filter(course_department == "General Education")
+fs::file_delete(
+  c("spring_2019.xlsx", 
+    "spring_2018.xlsx", 
+    "spring_2017.xlsx", 
+    "fall_2016.xlsx", 
+    "fall_2017.xlsx", 
+    "fall_2018.xlsx"))
 
-gathered <- gen_ed %>% gather("year", "enrollment", 5:6)
+courses <- 
+  full_join(fall_2016, spring_2017, 
+            by = c("course_id", "course_title", "course_name")) %>% 
+  
+  full_join(fall_2017, 
+            by = c("course_id", "course_title", "course_name")) %>%
+  
+  full_join(spring_2018,
+            by = c("course_id", "course_title", "course_name")) %>%
+  
+  full_join(fall_2018,
+            by = c("course_id", "course_title", "course_name")) %>%
+  
+  full_join(spring_2019,
+            by = c("course_id", "course_title", "course_name")) %>% 
+  
+  separate(course_title, c("type", NA), sep = " ")
 
-gathered %>% ggplot(aes(x = year, y = enrollment)) + geom_point() + transition_states(type)
+gathered <- courses %>% gather("year", "enrollment", 4:9)
 
-gen_ed_totals <- gen_ed %>% 
-  group_by(type) %>% 
-  summarize(
-    "Total_2018" = sum(`2018`, na.rm=TRUE), 
-    "Total_2019" = sum(`2019`, na.rm=TRUE))
+gathered %>% group_by(type, course_name) %>% arrange(course_name, year) 
 
-gen_ed_totals %>% gather(key = "year", value = "enrollment", 2:3) %>% ggplot(aes(x = type, y = enrollment)) + geom_col() + facet_grid(~year)
-
-
-
-
-
-
-gen_ed %>% ggplot(aes(x = year, y = enrollment, color = course_title.x)) + geom_jitter() + coord_flip()
-
-gen_ed %>% filter(year == 2018) %>% ggplot(aes(x = enrollment)) + geom_histogram() + facet_wrap(~course_title.x)
-
-gen_ed2 <- all %>% filter(course_department.x == "General Education" | course_department.y == "General Education") 
+gathered %>% group_by(type, course_name) %>% arrange(course_name, year, type) %>% filter(!is.na(enrollment)) %>% 
+  ggplot(aes(x = year, y = enrollment, color = course_name)) + geom_col() + theme_few() + theme(legend.position = "none") + facet_wrap(~type)
 
 ```
+
+```{r analysis, echo=FALSE}
+
+# filter(!is.na(enrollment)) %>% summarize(n())
+
+gathered %>% 
+  mutate(year = fct_relevel(year, "fall_2016", "spring_2017", "fall_2017", "spring_2018", "fall_2018", "spring_2019")) %>%
+  
+  mutate(year = fct_recode(year, "Fall 2016" = "fall_2016", "Spring 2017" = "spring_2017", "Fall 2017" = "fall_2017", "Spring 2018" = "spring_2018", "Fall 2018" = "fall_2018", "Spring 2019" = "spring_2019")) %>%
+  
+  mutate(type = fct_recode(type, "Aesthetic & Interpretive Understanding" = "AESTHINT", "Culture & Belief" = "CULTBLF", "Ethical Reasoning" = "ETHRSON", "Empirical and Mathematical Reasoning" = "EMREAS", "Science of Living Systems" = "SCILIVSY", "Science of Physical Systems" = "SCIPHUNV", "U.S. & the World" = "US-WORLD", "Societies & the World" = "SOCWORLD")) %>%
+  
+  group_by(type, year) %>% 
+  summarize(count = sum(enrollment, na.rm=TRUE)) %>% 
+  ggplot(
+    aes(x = year, y = count, 
+        group = type, 
+        color = type)) + 
+  geom_point() + 
+  geom_line(size = 1.5, alpha = 0.5) + 
+  transition_states(type) + 
+  enter_fade() +
+  exit_fade() +
+  labs(title = "Harvard Gen Ed Enrollment: {closest_state}", subtitle = "Undergrads must take a class from each of the seven categories before graduating", x = NULL, y = "Category Enrollment", caption = "Source: Harvard Registrar") + theme_few() + theme(legend.position = "none")
+
+totals <- courses %>% 
+  group_by(type) %>% 
+  summarize("Fall_2016" = sum(`fall_2016`, na.rm=TRUE),
+    "Spring_2017" = sum(`spring_2017`, na.rm=TRUE),
+    "Fall_2017" = sum(`fall_2017`, na.rm=TRUE),
+    "Spring_2018" = sum(`spring_2018`, na.rm=TRUE),
+    "Fall_2018" = sum(`fall_2018`, na.rm=TRUE),
+    "Spring_2019" = sum(`spring_2019`, na.rm=TRUE))
+
+```
+
