@@ -1,9 +1,8 @@
 ---
-title: "course_enrollment"
-author: "Shivani Aggarwal"
-date: "April 6, 2019"
 output: html_document
 ---
+
+# Harvard Course Enrollment
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -12,20 +11,19 @@ knitr::opts_chunk$set(echo = TRUE)
 
 library(tidyverse)
 library(ggplot2)
+library(ggrepel)
+library(RColorBrewer)
 library(janitor)
 library(readxl)
 library(ggthemes)
-library(gt)
 library(fs)
-library(stringr)
-library(wordcloud)
 library(gganimate)
 
 ```
 
-```{r, echo=FALSE}
+```{r data, echo=FALSE}
 
-# Load in data covering three academic years - 2016-17, 2017-18, 2018-19
+# Load in data covering three academic years (six semesters) - 2016-17, 2017-18, and 2018-19
 
 # Spring 2019
 
@@ -51,38 +49,102 @@ download.file(url = "https://registrar.fas.harvard.edu/files/fas-registrar/files
 
 download.file(url = "http://registrar.fas.harvard.edu/files/fas-registrar/files/copy_of_class_enrollment_summary_by_term_10.06.2016.xlsx", destfile = "fall_2016.xlsx", mode="wb")
 
+```
+
+```{r dataframe, echo=FALSE}
+
+# To expedite the process of reading in each semester's enrollment data before
+# merging them to create a master file, I defined a function with the neccessary
+# standard proceedure.
+
+# This function takes in an xlsx file of enrollment data, as well as an
+# additional argument about how many lines to skip. I found that while most
+# semester data was formatted so as to require skipping 3 lines, Fall 2018 was
+# formatted such as to require skipping 2 lines, thus requiring this to be
+# variable.
 
 read_enrollment <- function(file, x = 3) {
+  
+  # Reads in xlsx file, skipping the specified number of lines to ensure that
+  # column headers are read in appropriately
+  
   read_xlsx(file, skip = x) %>% 
+    
+    # Uses the clean_names() function from the janitor package to ensure
+    # consistency in column header names
+    
     clean_names() %>% 
+    
+    # Removes courses without a valid course name, and that do not have an
+    # undergraduate enrollment of at least five, because I want to focus on
+    # valid undergrad courses
+    
     filter(! is.na(course_name), u_grad > 5) %>% 
-    filter(course_department == "General Education") %>% 
-        select(course_id, course_name, course_title, u_grad) 
+    
+    # At first, I wanted to create a master dataframe with all courses and then
+    # filter for Gen Eds. However, this would have taken up too much storage in
+    # my computer. Therefore, I had to filter for Gen Eds at this stage so as to
+    # reduce the size of the individual dataframes that I will be merging.
+    
+    # This is the condition that one would likely change in future analysis
+    # depending on the particular courses of interest
+    
+    filter(course_department == "General Education") %>%
+    
+    # Finally, I selected just the relevant variables, removing things like the
+    # course instructor, to allow for more simple manipulation of the data
+    
+    select(course_id, course_name, course_title, u_grad) 
 }
+
+# Using the function I created above, I now read in the data for the six
+# semesters for which I downloaded enrollment data for above.
+
+# After applying the function, I use the rename command on the u_grad column so
+# as to signify the particular year and semester that enrollment data is from -
+# this will be useful for keeping track of data when I merge the dataframes.
+
+# Because of this custom renaming of the column, I had to exclude it from my
+# function. The rename function within my defined function refused to take a
+# variable input.
+
+# Reading in fall 2016 data
 
 fall_2016 <- 
   read_enrollment("fall_2016.xlsx") %>% 
   rename(`fall_2016` = u_grad)
 
+# Reading in spring 2017 data
+
 spring_2017 <- 
   read_enrollment("spring_2017.xlsx") %>% 
   rename(`spring_2017` = u_grad)
+
+# Reading in fall 2017 data
 
 fall_2017 <- 
   read_enrollment("fall_2017.xlsx") %>% 
   rename(`fall_2017` = u_grad)
 
+# Reading in spring 2018 data
+
 spring_2018 <- 
   read_enrollment("spring_2018.xlsx") %>% 
   rename(`spring_2018` = u_grad)
+
+# Reading in fall 2018 data
 
 fall_2018 <- 
   read_enrollment("fall_2018.xlsx", 2) %>% 
   rename(`fall_2018` = u_grad)
 
+# Reading in spring 2019 data
+
 spring_2019 <- 
   read_enrollment("spring_2019.xlsx") %>% 
   rename(`spring_2019` = u_grad)
+
+# Delete the xlsx files now that they have been read into R data structures - they are no longer needed
 
 fs::file_delete(
   c("spring_2019.xlsx", 
@@ -91,6 +153,10 @@ fs::file_delete(
     "fall_2016.xlsx", 
     "fall_2017.xlsx", 
     "fall_2018.xlsx"))
+
+```
+
+```{r joins, echo=FALSE}
 
 courses <- 
   full_join(fall_2016, spring_2017, 
@@ -112,11 +178,6 @@ courses <-
 
 gathered <- courses %>% gather("year", "enrollment", 4:9)
 
-gathered %>% group_by(type, course_name) %>% arrange(course_name, year) 
-
-gathered %>% group_by(type, course_name) %>% arrange(course_name, year, type) %>% filter(!is.na(enrollment)) %>% 
-  ggplot(aes(x = year, y = enrollment, color = course_name)) + geom_col() + theme_few() + theme(legend.position = "none") + facet_wrap(~type)
-
 ```
 
 ```{r analysis, echo=FALSE}
@@ -124,33 +185,99 @@ gathered %>% group_by(type, course_name) %>% arrange(course_name, year, type) %>
 # filter(!is.na(enrollment)) %>% summarize(n())
 
 gathered %>% 
-  mutate(year = fct_relevel(year, "fall_2016", "spring_2017", "fall_2017", "spring_2018", "fall_2018", "spring_2019")) %>%
   
-  mutate(year = fct_recode(year, "Fall 2016" = "fall_2016", "Spring 2017" = "spring_2017", "Fall 2017" = "fall_2017", "Spring 2018" = "spring_2018", "Fall 2018" = "fall_2018", "Spring 2019" = "spring_2019")) %>%
+  # Relevel the year factors such that they reflect the appropriate
+  # chronological order of the semesters - critical when the data is being
+  # plotted
   
-  mutate(type = fct_recode(type, "Aesthetic & Interpretive Understanding" = "AESTHINT", "Culture & Belief" = "CULTBLF", "Ethical Reasoning" = "ETHRSON", "Empirical and Mathematical Reasoning" = "EMREAS", "Science of Living Systems" = "SCILIVSY", "Science of Physical Systems" = "SCIPHUNV", "U.S. & the World" = "US-WORLD", "Societies & the World" = "SOCWORLD")) %>%
+  mutate(year = fct_relevel(year, 
+                            "fall_2016", 
+                            "spring_2017", 
+                            "fall_2017", 
+                            "spring_2018", 
+                            "fall_2018", 
+                            "spring_2019")) %>%
+  
+  # Recode the year factors such that they have more polished capitalization and
+  # presentation for plotting
+  
+  mutate(year = fct_recode(year, 
+                           "Fall 2016" = "fall_2016",
+                           "Spring 2017" = "spring_2017",
+                           "Fall 2017" = "fall_2017",
+                           "Spring 2018" = "spring_2018",
+                           "Fall 2018" = "fall_2018",
+                           "Spring 2019" = "spring_2019")) %>%
+  
+  # Similarly, recode the factors for type of general education course to be
+  # more informative and polished than their standard abbreviations
+  
+  mutate(type = fct_recode(type, 
+                           "Aesthetic & Interpretive Understanding" = "AESTHINT", 
+                           "Culture & Belief" = "CULTBLF",
+                           "Ethical Reasoning" = "ETHRSON",
+                           "Empirical and Mathematical Reasoning" = "EMREAS", 
+                           "Science of Living Systems" = "SCILIVSY", 
+                           "Science of Physical Systems" = "SCIPHUNV", 
+                           "U.S. & the World" = "US-WORLD",
+                           "Societies & the World" = "SOCWORLD")) %>%
+  
+  # Group by type and by year such that any calculations will be performed among
+  # the classes of a given type (e.g. Ethical Reasoning) and a given semester
+  # (e.g. Fall 2017)
   
   group_by(type, year) %>% 
+  
+  # Calculate the total enrollment in each category of gen ed class in each
+  # semester
+  
   summarize(count = sum(enrollment, na.rm=TRUE)) %>% 
+  
   ggplot(
     aes(x = year, y = count, 
         group = type, 
         color = type)) + 
+  
+  # I felt it was important to add visible points because this is not a
+  # continuous data set - highlighting the true points emphasizes that the lines
+  # are meant to show the trend
+  
   geom_point() + 
+  
   geom_line(size = 1.5, alpha = 0.5) + 
+  
+  # Animate the data to flicker between different gen ed categories. All Harvard
+  # students must take a class in each of the eight categories before they
+  # graduate, or fulfill it with an equivalent departmental course. Which Gen
+  # Eds are students taking departmental classes to fill? Which Gen Eds are
+  # students primarily fulfilling in the Fall versus in the Spring - where is
+  # there a gap for a new course
+  
   transition_states(type) + 
+  
   enter_fade() +
+  
   exit_fade() +
-  labs(title = "Harvard Gen Ed Enrollment: {closest_state}", subtitle = "Undergrads must take a class from each of the seven categories before graduating", x = NULL, y = "Category Enrollment", caption = "Source: Harvard Registrar") + theme_few() + theme(legend.position = "none")
-
-totals <- courses %>% 
-  group_by(type) %>% 
-  summarize("Fall_2016" = sum(`fall_2016`, na.rm=TRUE),
-    "Spring_2017" = sum(`spring_2017`, na.rm=TRUE),
-    "Fall_2017" = sum(`fall_2017`, na.rm=TRUE),
-    "Spring_2018" = sum(`spring_2018`, na.rm=TRUE),
-    "Fall_2018" = sum(`fall_2018`, na.rm=TRUE),
-    "Spring_2019" = sum(`spring_2019`, na.rm=TRUE))
+  
+  # Add appropriate titles and labels to enhance the presentation of information
+  
+  labs(
+    title = "Harvard Gen Ed Enrollment: {closest_state}", 
+    subtitle = "Undergrads must take a class from each of the seven categories before graduating", 
+    x = NULL, 
+    y = "Total Enrollment", 
+    caption = "Source: Harvard Registrar") +
+  
+  # Modify the theme using presets from the ggthemes package - I really like
+  # theme_few because of its clean, minimalist look
+  
+  theme_few() + 
+  
+  # Use the theme function to alter additional plot parameters to enhance
+  # aesthetics, removing the legend because the title text describes the type of
+  # gen ed course being shown
+  
+  theme(legend.position = "none")
 
 ```
 
