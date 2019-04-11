@@ -158,31 +158,68 @@ fs::file_delete(
 
 ```{r joins, echo=FALSE}
 
+# Create one dataframe with the gen ed courses from the past six semesters. A
+# full join is appropriate in this situation because I would like to keep
+# courses even if they may not have enrollment in more than one semester (e.g. I
+# am not just looking for courses offered in all the semesters being examined,
+# in which case an inner_join would be more useful)
+
 courses <- 
+  
+  # If nothing is specified for by, the function will join the dataframes on all
+  # parallel columns and output a warning, much like the warning about column
+  # specifications when reading in a csv without specifications. I inputted
+  # those specifications to remove the warning
+  
   full_join(fall_2016, spring_2017, 
             by = c("course_id", "course_title", "course_name")) %>% 
+  
+  # Only two dataframes can be joined at a given time, therefore I have to join
+  # the others in multiple steps. The order matters somewhat in creating the
+  # chronological column order with enrollments
   
   full_join(fall_2017, 
             by = c("course_id", "course_title", "course_name")) %>%
   
+  # Continue building the dataframe of historical gen ed offerings by adding
+  # Spring 2018 data
+  
   full_join(spring_2018,
             by = c("course_id", "course_title", "course_name")) %>%
+  
+    # Continue building the dataframe of historical gen ed offerings by adding
+    # Fall 2018 data
   
   full_join(fall_2018,
             by = c("course_id", "course_title", "course_name")) %>%
   
+    # Continue building the dataframe of historical gen ed offerings by adding
+    # spring 2019 data
+  
   full_join(spring_2019,
             by = c("course_id", "course_title", "course_name")) %>% 
   
+  # For the purposes of my analysis, I want to look at enrollment in the
+  # different gen ed course categories. There are eight types of gen ed courses
+  # - undergrads technically must take one class (or a qualifying departmental
+  # course) in each category. Therefore, I manipulated the course_title
+  # information to provide me with the gen ed category of a given gen ed course
+  # - separating the categorical abbreviation from the number and casting it to
+  # a column called type
+  
   separate(course_title, c("type", NA), sep = " ")
+
+# Having a dataframe format like the one just created is useful for creating
+# tables as enrollment is spread across by year, with each year represented in a
+# column. For plotting purposes, however, we need a format in which all of the
+# different years reflect different factors of a common variable. This can be
+# accomplished through the gather command, gathering the column indices that refer to the enrollments across different semesters
 
 gathered <- courses %>% gather("year", "enrollment", 4:9)
 
 ```
 
 ```{r analysis, echo=FALSE}
-
-# filter(!is.na(enrollment)) %>% summarize(n())
 
 gathered %>% 
   
@@ -244,6 +281,10 @@ gathered %>%
   
   geom_point() + 
   
+  # Add a line between points to visually represent the trend in gen ed
+  # enrollment and change between the semesters, as conveyed by the slope of the
+  # line. Make it translucent so the point values are still clearly visible.
+  
   geom_line(size = 1.5, alpha = 0.5) + 
   
   # Animate the data to flicker between different gen ed categories. All Harvard
@@ -254,6 +295,9 @@ gathered %>%
   # there a gap for a new course
   
   transition_states(type) + 
+  
+  # Make the animation smoother by specifying that states fade in and out,
+  # rather than abruptly disappear
   
   enter_fade() +
   
@@ -268,12 +312,12 @@ gathered %>%
     y = "Total Enrollment", 
     caption = "Source: Harvard Registrar") +
   
-  # Modify the theme using presets from the ggthemes package - I really like
+  # Following Healy's advice, modify the theme using presets from the ggthemes package - I really like
   # theme_few because of its clean, minimalist look
   
   theme_few() + 
   
-  # Add a custom color scheme, picking one for discrete categorical variables
+  # Following Healy's advice, add a custom color scheme, picking one for discrete categorical variables
   # and one that will show up nicely on a white background (a gradient would not
   # be appropriate in this situation as the variable -- gen ed type -- is not
   # continuous)
