@@ -273,6 +273,13 @@ gathered %>%
   
   theme_few() + 
   
+  # Add a custom color scheme, picking one for discrete categorical variables
+  # and one that will show up nicely on a white background (a gradient would not
+  # be appropriate in this situation as the variable -- gen ed type -- is not
+  # continuous)
+  
+  scale_color_brewer(palette = "Dark2") +
+  
   # Use the theme function to alter additional plot parameters to enhance
   # aesthetics, removing the legend because the title text describes the type of
   # gen ed course being shown
