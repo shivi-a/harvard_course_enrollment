@@ -4,4 +4,4 @@ All undergrads at Harvard College must take one class in eight Gen Ed categories
 
 Visualizations based on data from the [Harvard Registrar's Office](https://registrar.fas.harvard.edu/faculty-staff/courses/enrollment/archived-course-enrollment-reports)
 
-View static maps on [RPubs](http://rpubs.com/shivi-a/harvard_course_enrollment)
+View animated plot on [RPubs](http://rpubs.com/shivi-a/harvard_course_enrollment)
