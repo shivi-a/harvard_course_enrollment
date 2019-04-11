@@ -270,6 +270,12 @@ gathered %>%
   
   summarize(count = sum(enrollment, na.rm=TRUE)) %>% 
   
+  # Create graphic showing the total enrollment in each gen ed category over
+  # time - revealing any unusually popular categories, any spikes that
+  # correspond to particular years or semester patterns, and any gen eds where
+  # students must be fulfilling the requirement through departmental courses if
+  # total enrollment is consistently low
+  
   ggplot(
     aes(x = year, y = count, 
         group = type, 
@@ -307,7 +313,7 @@ gathered %>%
   
   labs(
     title = "Harvard Gen Ed Enrollment: {closest_state}", 
-    subtitle = "Undergrads must take a class from each of the seven categories before graduating", 
+    subtitle = "Undergrads must take a class from each of the eight categories \n (or substitute a qualifying departmental course) before graduating", 
     x = NULL, 
     y = "Total Enrollment", 
     caption = "Source: Harvard Registrar") +
